@@ -5,4 +5,12 @@
     <dimen name="digital_x_offset">15dp</dimen>
     <dimen name="digital_x_offset_round">25dp</dimen>
     <dimen name="digital_y_offset">90dp</dimen>
+
+    <dimen name="extra_x_offset_high">15dp</dimen>
+    <dimen name="extra_x_offset_low">15dp</dimen>
+    <dimen name="extra_x_offset_icon">15dp</dimen>
+
+    <dimen name="extra_y_offset_high">25dp</dimen>
+    <dimen name="extra_y_offset_low">25dp</dimen>
+    <dimen name="extra_y_offset_icon">15dp</dimen>
 </resources>

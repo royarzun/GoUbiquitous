@@ -1,5 +1,6 @@
 <resources>
-    <string name="app_name">Wear</string>
-    <string name="message">Watch face tapped</string>
-    <string name="my_analog_name">My Analog</string>
+    <string name="app_name">SunshineWearApp</string>
+    <string name="message">Thanks for using Sunshine</string>
+    <string name="my_analog_name">My Digital Watch</string>
+    <string name="format_temperature">%d ºC</string>
 </resources>
