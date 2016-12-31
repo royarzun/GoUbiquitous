@@ -235,12 +235,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 case TAP_TYPE_TOUCH_CANCEL:
                     // The user has started a different gesture or otherwise cancelled the tap.
                     break;
-                case TAP_TYPE_TAP:
-                    // The user has completed the tap gesture.
-                    // TODO: Add code to handle the tap gesture.
-                    Toast.makeText(getApplicationContext(), R.string.message, Toast.LENGTH_SHORT)
-                            .show();
-                    break;
             }
             invalidate();
         }
