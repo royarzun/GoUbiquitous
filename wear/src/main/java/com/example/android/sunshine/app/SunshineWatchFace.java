@@ -14,13 +14,15 @@
  * limitations under the License.
  */
 
-package com.example.android.wear;
+package com.example.android.sunshine.app;
 
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -29,12 +31,28 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
-import android.widget.Toast;
 
+import com.example.android.sunshine.R;
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.Asset;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
+import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Wearable;
+
+import java.io.InputStream;
 import java.lang.ref.WeakReference;
 import java.util.Calendar;
 import java.util.TimeZone;
@@ -84,13 +102,83 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         }
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine {
+    private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener,
+            GoogleApiClient.ConnectionCallbacks,GoogleApiClient.OnConnectionFailedListener {
+        private static final String ASSET_KEY = "asset";
+        private static final String HIGH_TEMP_KEY ="high";
+        private static final String LOW_TEMP_KEY ="low";
+        private static final String PATH = "/wearable";
+
+        Paint mHighTempPaint;
+        Paint mLowTempPaint;
+        Paint mAmbientHighPaint;
+        Paint mAmbientLowPaint;
+        Paint mIconPaint;
+
+        private Double mTempHigh;
+        private Double mTempLow;
+        private Bitmap mIcon;
+
+        GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFace.this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(Wearable.API)
+                .build();
+
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
         Paint mTextPaint;
         boolean mAmbient;
         Calendar mCalendar;
+
+        @Override
+        public void onDataChanged(DataEventBuffer dataEventBuffer) {
+            for (DataEvent dataEvent : dataEventBuffer) {
+                if (dataEvent.getType() != DataEvent.TYPE_CHANGED) {
+                    continue;
+                }
+
+                DataItem dataItem = dataEvent.getDataItem();
+                if (!dataItem.getUri().getPath().equals(
+                        PATH)) {
+                    continue;
+                }
+
+                DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
+                DataMap config = dataMapItem.getDataMap();
+
+                mTempHigh = config.getDouble(HIGH_TEMP_KEY);
+                mTempLow = config.getDouble(LOW_TEMP_KEY);
+
+                Asset asset=config.getAsset(ASSET_KEY);
+                loadBitmapFromAsset(asset);
+
+            }
+
+        }
+
+        private void loadBitmapFromAsset(Asset asset) {
+            if (asset == null) {
+                throw new IllegalArgumentException("Asset must be non-null");
+            }
+
+            Wearable.DataApi.getFdForAsset(mGoogleApiClient, asset).setResultCallback(
+                    new ResultCallback<DataApi.GetFdForAssetResult>() {
+                        @Override
+                        public void onResult(DataApi.GetFdForAssetResult getFdForAssetResult) {
+                            InputStream assetInputStream = getFdForAssetResult.getInputStream();
+                            if (assetInputStream == null) {
+                                Log.w("VILLANUEVA", "Requested an unknown Asset.");
+                                mIcon = null;
+                            }
+                            // decode the stream into a bitmap
+                            Bitmap bitmap = BitmapFactory.decodeStream(assetInputStream);
+                            mIcon = Bitmap.createScaledBitmap(bitmap, 50, 50, false);
+                        }
+                    });
+        }
+
         final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
@@ -125,6 +213,25 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             mTextPaint = new Paint();
             mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+
+
+            mHighTempPaint = new Paint();
+            mHighTempPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mHighTempPaint.setTextSize(35f);
+
+            mAmbientHighPaint = new Paint();
+            mAmbientHighPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mAmbientHighPaint.setTextSize(35f);
+
+            mLowTempPaint = new Paint();
+            mLowTempPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mLowTempPaint.setTextSize(35f);
+
+            mAmbientLowPaint=new Paint();
+            mAmbientLowPaint=createTextPaint(resources.getColor(R.color.digital_text));
+            mAmbientLowPaint.setTextSize(35f);
+
+            mIconPaint = new Paint();
 
             mCalendar = Calendar.getInstance();
         }
@@ -241,6 +348,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
         @Override
         public void onDraw(Canvas canvas, Rect bounds) {
+            Resources resources = SunshineWatchFace.this.getResources();
             // Draw the background.
             if (isInAmbientMode()) {
                 canvas.drawColor(Color.BLACK);
@@ -258,6 +366,30 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     : String.format("%d:%02d:%02d", mCalendar.get(Calendar.HOUR),
                     mCalendar.get(Calendar.MINUTE), mCalendar.get(Calendar.SECOND));
             canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
+
+            if (mTempHigh == null) {
+                mTempHigh = 0.0d;
+            }
+            if (mTempLow == null) {
+                mTempLow=0.0d;
+            }
+
+            canvas.drawText(String.format(getString(R.string.format_temperature), mTempHigh),
+                    mXOffset + resources.getDimension(R.dimen.extra_x_offset_high),
+                    mYOffset + resources.getDimension(R.dimen.extra_y_offset_high),
+                    isInAmbientMode() ? mAmbientHighPaint:mHighTempPaint);
+
+
+            canvas.drawText(String.format(getString(R.string.format_temperature),mTempLow),
+                    mXOffset + resources.getDimension(R.dimen.extra_x_offset_low),
+                    mYOffset + resources.getDimension(R.dimen.extra_y_offset_low),
+                    isInAmbientMode() ? mAmbientLowPaint: mLowTempPaint);
+
+            if (mIcon!=null && !isInAmbientMode()) {
+                canvas.drawBitmap(mIcon, mXOffset + resources.getDimension(R.dimen.extra_x_offset_icon),
+                        mYOffset + resources.getDimension(R.dimen.extra_y_offset_icon), mIconPaint);
+            }
+
         }
 
         /**
@@ -290,6 +422,21 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                         - (timeMs % INTERACTIVE_UPDATE_RATE_MS);
                 mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME, delayMs);
             }
+        }
+
+        @Override
+        public void onConnected(@Nullable Bundle bundle) {
+            Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
+        }
+
+        @Override
+        public void onConnectionSuspended(int i) {
+
+        }
+
+        @Override
+        public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
         }
     }
 }
