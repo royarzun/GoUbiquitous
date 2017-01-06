@@ -103,7 +103,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
     }
 
     private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener,
-            GoogleApiClient.ConnectionCallbacks,GoogleApiClient.OnConnectionFailedListener {
+            GoogleApiClient.ConnectionCallbacks,
+            GoogleApiClient.OnConnectionFailedListener {
         private static final String ASSET_KEY = "asset";
         private static final String HIGH_TEMP_KEY ="high";
         private static final String LOW_TEMP_KEY ="low";
@@ -205,6 +206,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     .setShowSystemUiTime(false)
                     .setAcceptsTapEvents(true)
                     .build());
+            mGoogleApiClient.connect();
             Resources resources = SunshineWatchFace.this.getResources();
             mYOffset = resources.getDimension(R.dimen.digital_y_offset);
 
@@ -256,12 +258,15 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             if (visible) {
                 registerReceiver();
+                mGoogleApiClient.connect();
 
                 // Update time zone in case it changed while we weren't visible.
                 mCalendar.setTimeZone(TimeZone.getDefault());
                 invalidate();
             } else {
                 unregisterReceiver();
+                mGoogleApiClient.disconnect();
+
             }
 
             // Whether the timer should be running depends on whether we're visible (as well as
@@ -427,16 +432,16 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         @Override
         public void onConnected(@Nullable Bundle bundle) {
             Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
+            Log.d("Engine", "connection successful to google services");
         }
 
         @Override
         public void onConnectionSuspended(int i) {
-
+            Log.d("Engine", "connection suspended to the google services");
         }
 
         @Override
         public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
-
         }
     }
 }
