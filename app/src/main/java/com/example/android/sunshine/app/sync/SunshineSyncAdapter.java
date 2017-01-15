@@ -22,8 +22,6 @@ import android.graphics.BitmapFactory;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Looper;
-import android.os.Handler;
 import android.preference.PreferenceManager;
 import android.support.annotation.IntDef;
 import android.support.annotation.NonNull;
@@ -39,8 +37,8 @@ import com.example.android.sunshine.app.R;
 import com.example.android.sunshine.app.Utility;
 import com.example.android.sunshine.app.data.WeatherContract;
 import com.example.android.sunshine.app.muzei.WeatherMuzeiSource;
+import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.Asset;
 import com.google.android.gms.wearable.DataApi;
@@ -65,7 +63,8 @@ import java.util.Vector;
 import java.util.concurrent.ExecutionException;
 
 
-public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements GoogleApiClient.ConnectionCallbacks{
+public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener{
     public final String LOG_TAG = SunshineSyncAdapter.class.getSimpleName();
     public static final String ACTION_DATA_UPDATED =
             "com.example.android.sunshine.app.ACTION_DATA_UPDATED";
@@ -108,41 +107,43 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements 
 
     public SunshineSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
-        mGoogleApiClient = new GoogleApiClient.Builder(context).addApi(Wearable.API).build();
-        mGoogleApiClient.connect();
     }
 
     @Override
     public void onConnected(Bundle bundle) {
-
+        Log.d(LOG_TAG, "im connected to the google services");
     }
 
     @Override
     public void onConnectionSuspended(int i) {
+        Log.d(LOG_TAG, "connection suspended to the google services");
+    }
 
+    @Override
+    public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+        Log.d(LOG_TAG, Integer.toString(connectionResult.getErrorCode()));
+        Log.d(LOG_TAG, "connection failed to google services");
     }
 
     private void sendDataToWearable(final double high, final double low, int weatherId) {
-        Handler handler = new Handler(Looper.getMainLooper());
-
-        PutDataMapRequest updateCounterDataMapRequest = PutDataMapRequest.create(PATH);
-        updateCounterDataMapRequest.getDataMap().putDouble(HIGH_TEMP_KEY, high);
-        updateCounterDataMapRequest.getDataMap().putDouble(LOW_TEMP_KEY, low);
+        PutDataMapRequest dataMapRequest = PutDataMapRequest.create(PATH);
+        dataMapRequest.getDataMap().putDouble(HIGH_TEMP_KEY, high);
+        dataMapRequest.getDataMap().putDouble(LOW_TEMP_KEY, low);
+        dataMapRequest.getDataMap().putLong("timestamp", System.currentTimeMillis());
 
         int id = Utility.getArtResourceForWeatherCondition(weatherId);
         Bitmap bitmap = BitmapFactory.decodeResource(getContext().getResources(), id);
         Asset asset = createAssetFromBitmap(bitmap);
+        dataMapRequest.getDataMap().putAsset(ASSET_KEY, asset);
 
-        updateCounterDataMapRequest.getDataMap().putAsset(ASSET_KEY, asset);
-        updateCounterDataMapRequest.getDataMap().putLong("timestamp", System.currentTimeMillis());
-
-        PutDataRequest putDataRequest = updateCounterDataMapRequest.asPutDataRequest();
-        PendingResult<DataApi.DataItemResult> pendingResult = Wearable.DataApi.putDataItem(mGoogleApiClient, putDataRequest);
-        pendingResult.setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
+        PutDataRequest putDataRequest = dataMapRequest.asPutDataRequest();
+        putDataRequest.setUrgent();
+        Wearable.DataApi.putDataItem(mGoogleApiClient, putDataRequest).setResultCallback(new ResultCallback<DataApi.DataItemResult>() {
             @Override
             public void onResult(@NonNull DataApi.DataItemResult dataItemResult) {
                 if (dataItemResult.getStatus().isSuccess()) {
-                    Log.d(LOG_TAG, "onresult success");
+                    Log.d(LOG_TAG, "onresult success data was sent!!!");
+                    Log.d(LOG_TAG, "Data item set: " + dataItemResult.getDataItem().getUri());
                 } else {
                     Log.d(LOG_TAG, "onresult failed");
                 }
@@ -159,7 +160,12 @@ public class SunshineSyncAdapter extends AbstractThreadedSyncAdapter implements 
     @Override
     public void onPerformSync(Account account, Bundle extras, String authority, ContentProviderClient provider, SyncResult syncResult) {
         Log.d(LOG_TAG, "Starting sync");
-
+        mGoogleApiClient = new GoogleApiClient.Builder(getContext())
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                .addApi(Wearable.API)
+                .build();
+        mGoogleApiClient.connect();
         // We no longer need just the location String, but also potentially the latitude and
         // longitude, in case we are syncing based on a new Place Picker API result.
         Context context = getContext();
