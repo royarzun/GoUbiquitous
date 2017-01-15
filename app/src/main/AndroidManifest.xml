@@ -79,7 +79,8 @@
         </service>
 
         <!-- The SyncAdapter service -->
-        <service android:name=".sync.SunshineSyncService" android:exported="true">
+        <service android:name=".sync.SunshineSyncService"
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.content.SyncAdapter" />
             </intent-filter>
