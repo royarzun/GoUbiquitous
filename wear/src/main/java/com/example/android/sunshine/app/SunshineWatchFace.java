@@ -13,7 +13,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package com.example.android.sunshine.app;
 
 import android.content.BroadcastReceiver;
@@ -48,6 +47,7 @@ import com.google.android.gms.wearable.DataApi;
 import com.google.android.gms.wearable.DataEvent;
 import com.google.android.gms.wearable.DataEventBuffer;
 import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataItemBuffer;
 import com.google.android.gms.wearable.DataMap;
 import com.google.android.gms.wearable.DataMapItem;
 import com.google.android.gms.wearable.Wearable;
@@ -77,6 +77,11 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
      */
     private static final int MSG_UPDATE_TIME = 0;
 
+    private static final String ASSET_KEY = "asset";
+    private static final String HIGH_TEMP_KEY ="high";
+    private static final String LOW_TEMP_KEY ="low";
+    private static final String PATH = "/wearable";
+
     @Override
     public Engine onCreateEngine() {
         return new Engine();
@@ -105,10 +110,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
     private class Engine extends CanvasWatchFaceService.Engine implements DataApi.DataListener,
             GoogleApiClient.ConnectionCallbacks,
             GoogleApiClient.OnConnectionFailedListener {
-        private static final String ASSET_KEY = "asset";
-        private static final String HIGH_TEMP_KEY ="high";
-        private static final String LOW_TEMP_KEY ="low";
-        private static final String PATH = "/wearable";
+
+        private GoogleApiClient mGoogleApiClient;
+
 
         Paint mHighTempPaint;
         Paint mLowTempPaint;
@@ -116,15 +120,9 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         Paint mAmbientLowPaint;
         Paint mIconPaint;
 
-        private Double mTempHigh;
-        private Double mTempLow;
+        private Double mTempHigh=0.0;
+        private Double mTempLow=0.0;
         private Bitmap mIcon;
-
-        GoogleApiClient mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFace.this)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                .addApi(Wearable.API)
-                .build();
 
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
@@ -133,31 +131,14 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         boolean mAmbient;
         Calendar mCalendar;
 
-        @Override
-        public void onDataChanged(DataEventBuffer dataEventBuffer) {
-            for (DataEvent dataEvent : dataEventBuffer) {
-                if (dataEvent.getType() != DataEvent.TYPE_CHANGED) {
-                    continue;
-                }
+        float mXOffset;
+        float mYOffset;
 
-                DataItem dataItem = dataEvent.getDataItem();
-                if (!dataItem.getUri().getPath().equals(
-                        PATH)) {
-                    continue;
-                }
-
-                DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
-                DataMap config = dataMapItem.getDataMap();
-
-                mTempHigh = config.getDouble(HIGH_TEMP_KEY);
-                mTempLow = config.getDouble(LOW_TEMP_KEY);
-
-                Asset asset=config.getAsset(ASSET_KEY);
-                loadBitmapFromAsset(asset);
-
-            }
-
-        }
+        /**
+         * Whether the display supports fewer bits for each color in ambient mode. When true, we
+         * disable anti-aliasing in ambient mode.
+         */
+        boolean mLowBitAmbient;
 
         private void loadBitmapFromAsset(Asset asset) {
             if (asset == null) {
@@ -170,7 +151,7 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                         public void onResult(DataApi.GetFdForAssetResult getFdForAssetResult) {
                             InputStream assetInputStream = getFdForAssetResult.getInputStream();
                             if (assetInputStream == null) {
-                                Log.w("VILLANUEVA", "Requested an unknown Asset.");
+                                Log.w("Engine", "Requested an unknown Asset.");
                                 mIcon = null;
                             }
                             // decode the stream into a bitmap
@@ -187,14 +168,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 invalidate();
             }
         };
-        float mXOffset;
-        float mYOffset;
-
-        /**
-         * Whether the display supports fewer bits for each color in ambient mode. When true, we
-         * disable anti-aliasing in ambient mode.
-         */
-        boolean mLowBitAmbient;
 
         @Override
         public void onCreate(SurfaceHolder holder) {
@@ -206,8 +179,15 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     .setShowSystemUiTime(false)
                     .setAcceptsTapEvents(true)
                     .build());
-            mGoogleApiClient.connect();
+
             Resources resources = SunshineWatchFace.this.getResources();
+
+            mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFace.this)
+                    .addConnectionCallbacks(this)
+                    .addOnConnectionFailedListener(this)
+                    .addApi(Wearable.API)
+                    .build();
+
             mYOffset = resources.getDimension(R.dimen.digital_y_offset);
 
             mBackgroundPaint = new Paint();
@@ -257,16 +237,17 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             super.onVisibilityChanged(visible);
 
             if (visible) {
-                registerReceiver();
                 mGoogleApiClient.connect();
+                registerReceiver();
 
                 // Update time zone in case it changed while we weren't visible.
                 mCalendar.setTimeZone(TimeZone.getDefault());
                 invalidate();
             } else {
+                if (mGoogleApiClient != null && mGoogleApiClient.isConnected()) {
+                    mGoogleApiClient.disconnect();
+                }
                 unregisterReceiver();
-                mGoogleApiClient.disconnect();
-
             }
 
             // Whether the timer should be running depends on whether we're visible (as well as
@@ -431,17 +412,40 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
         @Override
         public void onConnected(@Nullable Bundle bundle) {
-            Wearable.DataApi.addListener(mGoogleApiClient, Engine.this);
+            Wearable.DataApi.addListener(mGoogleApiClient, this);
             Log.d("Engine", "connection successful to google services");
         }
 
         @Override
         public void onConnectionSuspended(int i) {
+            Wearable.DataApi.removeListener(mGoogleApiClient, this);
+            mGoogleApiClient.disconnect();
             Log.d("Engine", "connection suspended to the google services");
         }
 
         @Override
         public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+            Log.d("Engine", "connection failed to the google services");
+        }
+
+        @Override
+        public void onDataChanged(DataEventBuffer dataEventBuffer) {
+            Log.v("WatchFace", "onDataChanged...");
+            for (DataEvent dataEvent : dataEventBuffer) {
+                if (dataEvent.getType() == DataEvent.TYPE_CHANGED) {
+                    DataItem dataItem = dataEvent.getDataItem();
+                    if (dataItem.getUri().getPath().equals(PATH)) {
+                        DataMapItem dataMapItem = DataMapItem.fromDataItem(dataItem);
+                        DataMap config = dataMapItem.getDataMap();
+
+                        mTempHigh = config.getDouble(HIGH_TEMP_KEY);
+                        mTempLow = config.getDouble(LOW_TEMP_KEY);
+
+                        //Asset asset=config.getAsset(ASSET_KEY);
+                        //loadBitmapFromAsset(asset);
+                    }
+                }
+            }
         }
     }
 }
