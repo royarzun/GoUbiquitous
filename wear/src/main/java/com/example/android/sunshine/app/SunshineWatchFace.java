@@ -196,7 +196,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             mTextPaint = new Paint();
             mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
 
-
             mHighTempPaint = new Paint();
             mHighTempPaint = createTextPaint(resources.getColor(R.color.digital_text));
             mHighTempPaint.setTextSize(35f);
@@ -373,10 +372,11 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                     isInAmbientMode() ? mAmbientLowPaint: mLowTempPaint);
 
             if (mIcon!=null && !isInAmbientMode()) {
-                canvas.drawBitmap(mIcon, mXOffset + resources.getDimension(R.dimen.extra_x_offset_icon),
-                        mYOffset + resources.getDimension(R.dimen.extra_y_offset_icon), mIconPaint);
+                canvas.drawBitmap(mIcon,
+                        mXOffset + resources.getDimension(R.dimen.extra_x_offset_icon),
+                        mYOffset + resources.getDimension(R.dimen.extra_y_offset_icon),
+                        mIconPaint);
             }
-
         }
 
         /**
@@ -420,7 +420,6 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         @Override
         public void onConnectionSuspended(int i) {
             Wearable.DataApi.removeListener(mGoogleApiClient, this);
-            mGoogleApiClient.disconnect();
             Log.d("Engine", "connection suspended to the google services");
         }
 
@@ -442,8 +441,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                         mTempHigh = config.getDouble(HIGH_TEMP_KEY);
                         mTempLow = config.getDouble(LOW_TEMP_KEY);
 
-                        //Asset asset=config.getAsset(ASSET_KEY);
-                        //loadBitmapFromAsset(asset);
+                        Asset asset=config.getAsset(ASSET_KEY);
+                        loadBitmapFromAsset(asset);
                     }
                 }
             }
